@@ -337,6 +337,38 @@ sub f_access {
     return 0;
 }
 
+sub f_open {
+    my ($path) = @_;
+    return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
+    return 0, {f => $r};
+}
+
+sub f_release {
+    my ($path, $fh) = @_;
+    # eventually the last reference to it will disappear
+    delete $fh->{f} if defined $fh;
+    return 0;
+}
+
+sub f_truncate {
+    my ($path, $size, undef, undef, $ctime) = @_;
+    return -Errno::EINVAL() if $size < 0;
+    # TODO: implement this!
+    return 0;
+}
+
+sub f_ftruncate {
+    my ($path, $size, $fh, @r) = @_;
+    f_truncate($path, $size, @r);
+}
+
+sub f_flush {
+    my ($path, $fh) = @_;
+    # nothing to do for the moment
+    return $fh->{errorcode} if defined $fh;
+    return 0;
+}
+
 sub _mk_mode {
     my ($owner, $group, $world, $sticky) = @_;
     return $owner * $S_UID + $group * $S_GID + $world + ($sticky // 0) * $S_SID;
@@ -387,30 +419,37 @@ Fuse::main(
     mountpoint => $mountpoint,
     mountopts  => "allow_other,default_permissions,hard_remove,use_ino,attr_timeout=0,readdir_ino",
     debug      => $opts->{debug},
-    getattr    => _db('getattr',      \&f_getattr),
-    fgetattr   => _db('fgetattr',     \&f_getattr),
-    readlink   => _db('readlink',     \&f_readlink),
-    chmod      => _ctx(_db('chmod',   \&f_chmod)),
-    chown      => _ctx(_db('chown',   \&f_chown)),
-    symlink    => _ctx(_db('symlink', \&f_symlink)),
-    link       => _ctx(_db('link',    \&f_link)),
-    unlink     => _ctx(_db('unlink',  \&f_unlink)),
-    rename     => _ctx(_db('rename',  \&f_rename)),
-    mknod      => _ctx(_db('mknod',   \&f_mknod)),
-    mkdir      => _ctx(_db('mkdir',   \&f_mkdir)),
-    rmdir      => _ctx(_db('rmdir',   \&f_rmdir)),
-    opendir    => _db('opendir',      \&f_opendir),
-    readdir    => _db('readdir',      \&f_readdir),
-    releasedir => _db('releasedir',   \&f_releasedir),
-    fsyncdir   => _db('fsyncdir',     \&f_fsyncdir),
-    fsync      => _db('fsync',        \&f_fsync),
-    setxattr   => _db('setxattr',     \&f_setxattr),
-    getxattr   => _db('getxattr',     \&f_getxattr),
-    removexattr=> _db('removexattr',  \&f_removexattr),
-    listxattr  => _db('listxattr',    \&f_listxattr),
-    utimens    => _db('utimens',      \&f_utimes),
-    statfs     => _db('statfs',       \&f_statfs),
-    access     => _db('access',       \&f_access),
+    getattr    => _db('getattr',        \&f_getattr),
+    fgetattr   => _db('fgetattr',       \&f_getattr),
+    readlink   => _db('readlink',       \&f_readlink),
+    chmod      => _ctx(_db('chmod',     \&f_chmod)),
+    chown      => _ctx(_db('chown',     \&f_chown)),
+    symlink    => _ctx(_db('symlink',   \&f_symlink)),
+    link       => _ctx(_db('link',      \&f_link)),
+    unlink     => _ctx(_db('unlink',    \&f_unlink)),
+    rename     => _ctx(_db('rename',    \&f_rename)),
+    mknod      => _ctx(_db('mknod',     \&f_mknod)),
+    mkdir      => _ctx(_db('mkdir',     \&f_mkdir)),
+    rmdir      => _ctx(_db('rmdir',     \&f_rmdir)),
+    opendir    => _db('opendir',        \&f_opendir),
+    readdir    => _db('readdir',        \&f_readdir),
+    releasedir => _db('releasedir',     \&f_releasedir),
+    fsyncdir   => _db('fsyncdir',       \&f_fsyncdir),
+    fsync      => _db('fsync',          \&f_fsync),
+    setxattr   => _db('setxattr',       \&f_setxattr),
+    getxattr   => _db('getxattr',       \&f_getxattr),
+    removexattr=> _db('removexattr',    \&f_removexattr),
+    listxattr  => _db('listxattr',      \&f_listxattr),
+    utimens    => _db('utimens',        \&f_utimes),
+    statfs     => _db('statfs',         \&f_statfs),
+    access     => _db('access',         \&f_access),
+    open       => _db('open',           \&f_open),
+    release    => _db('release',        \&f_release),
+    read       => _db('read',           \&f_read),
+    write      => _db('write',          \&f_write),
+    truncate   => _ctx(_db('truncate',  \&f_truncate)),
+    ftruncate  => _ctx(_db('ftruncate', \&f_ftruncate)),
+    flush      => _db('flush',          \&f_flush),
 );
 
 
