@@ -137,8 +137,18 @@ sub f_readdir {
 }
 
 sub f_releasedir {
-    my ($path, $dirent) = @_;
+    my ($path, $dir_fh) = @_;
     return 0;
+}
+
+sub f_fsyncdir {
+    my ($path, $dir_fh) = @_;
+    return 0; # nothing to do for now
+}
+
+sub f_fsync {
+    my ($path, $fh) = @_;
+    return 0; # nothing to do for now
 }
 
 sub f_unlink {
@@ -204,12 +214,18 @@ Fuse::main(
     mountopts  => "allow_other,default_permissions,hard_remove,use_ino,attr_timeout=0,readdir_ino",
     debug      => $opts->{debug},
     getattr    => _db('getattr',      \&f_getattr),
+    fgetattr   => _db('fgetattr',     \&f_getattr),
     readlink   => _db('readlink',     \&f_readlink),
     symlink    => _ctx(_db('symlink', \&f_symlink)),
     mknod      => _ctx(_db('mknod',   \&f_mknod)),
     mkdir      => _ctx(_db('mkdir',   \&f_mkdir)),
     rmdir      => _ctx(_db('rmdir',   \&f_rmdir)),
     getdir     => _db('getdir',       \&f_getdir),
+    opendir    => _db('opendir',      \&f_opendir),
+    readdir    => _db('readdir',      \&f_readdir),
+    releasedir => _db('releasedir',   \&f_releasedir),
+    fsyncdir   => _db('fsyncdir',     \&f_fsyncdir),
+    fsync      => _db('fsync',        \&f_fsync),
 );
 
 
