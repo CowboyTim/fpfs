@@ -54,22 +54,36 @@ $fs_meta->{'/'}{directorylist} = {};
 sub f_getattr {
     my ($path) = @_;
     return -Errno::ENAMETOOLONG() if length($path) > 1024;
-    my ($dir, $file) = (dirname($path), basename($path)); 
+    my ($dir, $file) = _splitpath($path);
     return -Ernno::ENAMETOOLONG() if length($file) > 255;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
-    return 0, $r->{ino}, $r->{mode}, $r->{nlink}//1, $r->{uid}, $r->{gid}, 0, $r->{size}, $r->{atime}, $r->{mtime}, $r->{ctime}, 0, 0;
+    return 0, $r->{ino}, $r->{mode}, $r->{nlink}//1, $r->{uid}, $r->{gid}, $r->{dev}//0, $r->{size}, $r->{atime}, $r->{mtime}, $r->{ctime}, 0, 0;
 }
 
 sub f_readlink {
 }
 
 sub f_mknod {
+    my ($path, $mode, $rdev, $cuid, $cgid, $ctime) = @_;
+    # only called for non-symlinks, non-directories, non-files and links as
+    # those are handled by symlink, mkdir, create, link. This is called when
+    # mkfifo is used to make a named pipe for instance.
+    #
+    # FIXME: support 'plain' mknod too: S_IFBLK and S_IFCHR
+    my $entry = $fs_meta->{$path} = _new_meta($mode, $cuid, $cgid, $ctime);
+    $entry->{dev} = $rdev;
+
+    my ($parent, $file) = _splitpath($path);
+    my $p = $fs_meta->{$parent};
+    $p->{directorylist}{$file} = $entry;
+    $p->{ctime} = $p->{mtime} = $ctime;
+    return 0
 }
 
 sub f_mkdir {
     my ($path, $mode, $cuid, $cgid, $ctime) = @_;
     return -Errno::ENAMETOOLONG() if length($path) > 1024;
-    my ($parent, $subdir) = (dirname($path), basename($path)); 
+    my ($parent, $subdir) = _splitpath($path);
     my $m = $fs_meta->{$path} = _new_meta($mode + $S_IFDIR, $cuid, $cgid, $ctime);
     $m->{directorylist} = {};
     $m->{nlink} = 2;
@@ -159,14 +173,19 @@ sub _ctx {
     };
 }
 
+sub _splitpath {
+    my ($path) = @_;
+    return dirname($path), basename($path);
+}
+
 Fuse::main(
     mountpoint => $mountpoint,
     mountopts  => "allow_other,default_permissions,hard_remove,use_ino,attr_timeout=0,readdir_ino",
     debug      => $opts->{debug},
-    getattr    => _db('getattr',    \&f_getattr), 
-    readlink   => _db('readlink',   \&f_readlink), 
-    getdir     => _db('getdir',     \&f_getdir), 
-    mknod      => _db('mknod',      \&f_mknod), 
+    getattr    => _db('getattr',    \&f_getattr),
+    readlink   => _db('readlink',   \&f_readlink),
+    getdir     => _db('getdir',     \&f_getdir),
+    mknod      => _ctx(_db('mknod', \&f_mknod)),
     mkdir      => _ctx(_db('mkdir', \&f_mkdir)),
 );
 
