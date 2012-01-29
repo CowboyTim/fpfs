@@ -41,6 +41,8 @@ my $S_IFBLK = 6*(2**12);
 my $S_IFREG = 2**15;
 my $S_IFLNK = $S_IFREG + $S_IFCHR;
 
+my $MAXINT  = 2**32 -1;
+
 my $S_WID   = 1;    #world
 my $S_GID   = 2**3; #group
 my $S_UID   = 2**6; #owner
@@ -157,10 +159,56 @@ sub f_unlink {
     return 0;
 }
 
+sub f_chown {
+    my ($path, $cuid, $cgid, undef, undef, $ctime) = @_;
+    return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
+
+    # Funny this is.. but this appears to be ext3 on linux behavior.
+    # However, FUSE doesn't give me e.g. -1 -1 as user root, while it
+    # wants the ctime to be adjusted. I think this is the nitty gritty
+    # details that makes this code rather 'not needed' anywayz..
+    #
+    # That's the reason why tests 141, 145, 149 and 153 of pjd fail
+    # btw...
+    if ($cuid != 0){
+        unless ($cuid == $MAXINT and $cgid == $MAXINT) {
+            $r->{mode} &= ~$S_SID;
+        }
+    }
+    $r->{uid} = $cuid != $MAXINT?$cuid:$r->{uid};
+    $r->{gid} = $cgid != $MAXINT?$cgid:$r->{gid};
+    $r->{ctime} = $ctime;
+    return 0
+}
+
+sub f_chmod {
+    my ($path, $mode, undef, undef, $ctime) = @_;
+    return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
+    $r->{mode}  = $mode;
+    $r->{ctime} = $ctime;
+    return 0;
+}
+
 sub f_rename {
 }
 
 sub f_link {
+    my ($from, $to, undef, undef, $ctime) = @_;
+    return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$from});
+
+    # update meta
+    $r->{ctime} = $ctime;
+    ($r->{nlink} //= 1)++;
+
+    # 'copy'
+    $fs_meta->{$to} = $r;
+
+    # update the TO parent: add entry + change meta
+    my ($toparent, $e) = _splitpath($to);
+    my $tp = $fs_meta->{$toparent};
+    $tp->{directorylist}{$e} = $r;
+    $tp->{ctime} = $tp->{mtime} = $ctime;
+    return 0
 }
 
 sub _mk_mode {
@@ -216,7 +264,10 @@ Fuse::main(
     getattr    => _db('getattr',      \&f_getattr),
     fgetattr   => _db('fgetattr',     \&f_getattr),
     readlink   => _db('readlink',     \&f_readlink),
+    chmod      => _ctx(_db('chmod',   \&f_chmod)),
+    chown      => _ctx(_db('chown',   \&f_chown)),
     symlink    => _ctx(_db('symlink', \&f_symlink)),
+    link       => _ctx(_db('link',    \&f_link)),
     mknod      => _ctx(_db('mknod',   \&f_mknod)),
     mkdir      => _ctx(_db('mkdir',   \&f_mkdir)),
     rmdir      => _ctx(_db('rmdir',   \&f_rmdir)),
