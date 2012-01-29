@@ -2,7 +2,7 @@
 
 use strict; use warnings;
 
-use Fuse qw(:all);
+use Fuse qw(:all :xattr);
 use Errno qw(:POSIX);
 use File::Basename qw(basename dirname);
 use Data::Dumper;
@@ -289,6 +289,32 @@ sub f_link {
     return 0
 }
 
+sub f_setxattr {
+    my ($path, $name, $value) = @_;
+    return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
+    ($r->{xattr} //= {})->{$name} = $value;
+    return 0;
+}
+
+sub f_getxattr {
+    my ($path, $name) = @_;
+    return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
+    return ($r->{xattr} //= {})->{$name};
+}
+
+sub f_removexattr {
+    my ($path, $name) = @_;
+    return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
+    delete $r->{xattr}{$name};
+    return 0;
+}
+
+sub f_listxattr {
+    my ($path) = @_;
+    return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
+    return values %{$r->{xattr}//{}}, 0;
+}
+
 sub _mk_mode {
     my ($owner, $group, $world, $sticky) = @_;
     return $owner * $S_UID + $group * $S_GID + $world + ($sticky // 0) * $S_SID;
@@ -356,6 +382,10 @@ Fuse::main(
     releasedir => _db('releasedir',   \&f_releasedir),
     fsyncdir   => _db('fsyncdir',     \&f_fsyncdir),
     fsync      => _db('fsync',        \&f_fsync),
+    setxattr   => _db('setxattr',     \&f_setxattr),
+    getxattr   => _db('getxattr',     \&f_getxattr),
+    removexattr=> _db('removexattr',  \&f_removexattr),
+    listxattr  => _db('listxattr',    \&f_listxattr),
 );
 
 
