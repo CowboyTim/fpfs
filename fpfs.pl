@@ -60,7 +60,22 @@ sub f_getattr {
     return 0, $r->{ino}, $r->{mode}, $r->{nlink}//1, $r->{uid}, $r->{gid}, $r->{dev}//0, $r->{size}, $r->{atime}, $r->{mtime}, $r->{ctime}, 0, 0;
 }
 
+sub f_symlink {
+    my ($from, $to, $cuid, $cgid, $ctime) = @_;
+    # 'from' isn't used,.. that can be even from a seperate filesystem, e.g.
+    # when someone makes a symlink on this filesystem...
+    my ($parent, $file) = _splitpath($to);
+    my $t = $fs_meta->{$to} = _new_meta(_mk_mode(7,7,7) + $S_IFLNK, $cuid, $cgid, $ctime);
+    $t->{target} = $from;
+    my $p = $fs_meta->{$parent}{directorylist}{$file} = $fs_meta->{$to};
+    $p->{ctime} = $p->{mtime} = $ctime;
+    return 0;
+}
+
 sub f_readlink {
+    my ($path) = @_;
+    return -Errno::ENOENT() unless defined(my $entry = $fs_meta->{$path});
+    return $entry->{target};
 }
 
 sub f_mknod {
@@ -125,10 +140,6 @@ sub f_unlink {
     return 0;
 }
 
-
-sub f_symlink {
-}
-
 sub f_rename {
 }
 
@@ -182,11 +193,12 @@ Fuse::main(
     mountpoint => $mountpoint,
     mountopts  => "allow_other,default_permissions,hard_remove,use_ino,attr_timeout=0,readdir_ino",
     debug      => $opts->{debug},
-    getattr    => _db('getattr',    \&f_getattr),
-    readlink   => _db('readlink',   \&f_readlink),
-    getdir     => _db('getdir',     \&f_getdir),
-    mknod      => _ctx(_db('mknod', \&f_mknod)),
-    mkdir      => _ctx(_db('mkdir', \&f_mkdir)),
+    getattr    => _db('getattr',      \&f_getattr),
+    readlink   => _db('readlink',     \&f_readlink),
+    symlink    => _ctx(_db('symlink', \&f_symlink)),
+    mknod      => _ctx(_db('mknod',   \&f_mknod)),
+    mkdir      => _ctx(_db('mkdir',   \&f_mkdir)),
+    getdir     => _db('getdir',       \&f_getdir),
 );
 
 
