@@ -21,7 +21,6 @@ GetOptions(
     no warnings 'redefine';
     *{debug} = sub {} unless $opts->{debug};
 }
-$SIG{__WARN__} = sub {debug(@_)};
 pod2usage(-verbose => 0) if $opts->{usage};
 pod2usage(-verbose => 2) if $opts->{manpage};
 my $mountpoint = shift @ARGV
@@ -29,6 +28,8 @@ my $mountpoint = shift @ARGV
         verbose => 1,
         msg     => "Need mountpount\n"
     );
+
+$SIG{__WARN__} = sub {die @_};
 
 debug('CPAN Fuse version', $Fuse::VERSION);
 
@@ -111,8 +112,14 @@ sub f_mkdir {
 }
 
 sub f_rmdir {
-    my ($fn) = @_;
-    return -Errno::ENOENT() unless defined (my $r = delete $fs_meta->{$fn});
+    my ($path, undef, undef, $ctime) = @_;
+    return -Errno::EEXIST() if keys %{$fs_meta->{$path}{directorylist}};
+    my ($parent, $dir) = _splitpath($path);
+    my $p = $fs_meta->{$parent};
+    $p->{nlink}--;
+    $p->{ctime} = $p->{mtime} = $ctime;
+    delete $p->{directorylist}{$dir};
+    delete $fs_meta->{$path};
     return 0;
 }
 
@@ -168,6 +175,9 @@ sub _new_meta {
 sub _db {
     my ($abbr, $f) = @_;
     sub {
+        local $SIG{__WARN__} = sub {
+            die $abbr, ': ', @_;
+        };
         debug($abbr, 'arguments', \@_);
         my @r = &$f(@_);
         debug($abbr, 'result', @r, $fs_meta);
@@ -198,6 +208,7 @@ Fuse::main(
     symlink    => _ctx(_db('symlink', \&f_symlink)),
     mknod      => _ctx(_db('mknod',   \&f_mknod)),
     mkdir      => _ctx(_db('mkdir',   \&f_mkdir)),
+    rmdir      => _ctx(_db('rmdir',   \&f_rmdir)),
     getdir     => _db('getdir',       \&f_getdir),
 );
 
