@@ -201,6 +201,69 @@ sub f_chmod {
 }
 
 sub f_rename {
+    my ($from, $to, undef, undef, $ctime) = @_;
+
+    # FUSE handles paths, e.g. a file being moved to a directory: the 'to'
+    # becomes that target directory + "/" + basename(from).
+
+    my $r_to = \($fs_meta->{$to});
+
+    if ($$r_to){
+
+        # target is a non-empty directory? return ENOTEMPTY errno.h
+        return -Errno::ENOTEMPTY() if keys %{$$r_to->{directorylist}//{}};
+
+        # if the target still exists, e.g. when you move a file to another
+        # file,first free the blocks: just add to the filesystem's freelist.
+        # For this we can simply unlink it, just make sure we use the real
+        # unlink, not the journalled one. Of course, we only unlink when it's a
+        # file, not in other cases. unlink here also maintains the nlink
+        # parameter.
+
+        # TODO: implement this
+        #if (fs_meta[to].blockmap) {
+            #luafs._unlink(self, to, ctime)
+        #}
+    }
+
+    # rename main node
+    $$r_to = delete $fs_meta->{$from};
+    $$r_to->{ctime} = $ctime;
+
+    # rename both parent's references to the renamed entity
+    my ($p, $e, $fs_p);
+
+    # 'to'
+    ($p, $e) = _splitpath($to);
+    $fs_p = $fs_meta->{$p};
+    $fs_p->{directorylist}{$e} = $$r_to;
+    $fs_p->{nlink}++;
+    $fs_p->{ctime} = $fs_p->{mtime} = $ctime;
+
+    # 'from'
+    ($p, $e) = _splitpath($from);
+    $fs_p = $fs_meta->{$p};
+    delete $fs_p->{directorylist}{$e};
+    $fs_p->{nlink}--;
+    $fs_p->{ctime} = $fs_p->{mtime} = $ctime;
+
+    # rename all decendants, maybe not such a good idea to use this
+    # mechanism, but don't forget, how many times does one rename e.g.
+    # /usr and such.. ;-). for a plain file (or empty subdir), this is for
+    # isn't even executed (looped actually)
+    #
+    # NOTE: 'to' here is of course the freshly moved entry, the previous 'to'
+    #       if any is gone, and will be garbage collected.
+    #
+    if (keys %{$$r_to->{directorylist}//{}}) {
+        my ($ts, $fs) = ("$to/", "$from/");
+        foreach my $sub (keys %{$$r_to->{directorylist}}){
+            my ($tts, $tfs) = ($ts.$sub, $fs.$sub);
+            $fs_meta->{$tts} = delete $fs_meta->{$tfs};
+        }
+    }
+
+    return 0
 }
 
 sub f_link {
@@ -280,6 +343,7 @@ Fuse::main(
     symlink    => _ctx(_db('symlink', \&f_symlink)),
     link       => _ctx(_db('link',    \&f_link)),
     unlink     => _ctx(_db('unlink',  \&f_unlink)),
+    rename     => _ctx(_db('rename',  \&f_rename)),
     mknod      => _ctx(_db('mknod',   \&f_mknod)),
     mkdir      => _ctx(_db('mkdir',   \&f_mkdir)),
     rmdir      => _ctx(_db('rmdir',   \&f_rmdir)),
