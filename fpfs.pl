@@ -325,6 +325,11 @@ sub f_listxattr {
     return values %{$r->{xattr}//{}}, 0;
 }
 
+sub f_statfs {
+    my ($path) = @_;
+    return 1024, $inode_start, (0xffffffffffffffff - $inode_start), 0, 0, 0;
+}
+
 sub _mk_mode {
     my ($owner, $group, $world, $sticky) = @_;
     return $owner * $S_UID + $group * $S_GID + $world + ($sticky // 0) * $S_SID;
@@ -397,6 +402,7 @@ Fuse::main(
     removexattr=> _db('removexattr',  \&f_removexattr),
     listxattr  => _db('listxattr',    \&f_listxattr),
     utimens    => _db('utimens',      \&f_utimes),
+    statfs     => _db('statfs',       \&f_statfs),
 );
 
 
