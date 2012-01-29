@@ -125,21 +125,25 @@ sub f_rmdir {
     return 0;
 }
 
-sub f_getdir {
-    my ($path) = @_;
-    return ['.', '..', keys %{($fs_meta->{$path}//{})->{directorylist}}, 0];
-}
-
 sub f_opendir {
     my ($path) = @_;
+    # each() is not intelligent enough, so we make a copy and do shift()...
+    # *sigh*. We could use a double array (basically implement the hash
+    # ourselves) and use an index iterator value.
+    return 0, [keys %{($fs_meta->{$path}//{})->{directorylist}}];
 }
 
 sub f_readdir {
     my ($path, $offset, $dir_fh) = @_;
+    $path = ($path ne '/')?"$path/":$path;
+    my ($dirent, $attr) = shift @{$dir_fh};
+    return 0 unless defined $dirent;
+    return [$offset+1, $dirent, [f_getattr("$path$dirent")]], 0;
 }
 
 sub f_releasedir {
     my ($path, $dir_fh) = @_;
+    # eventually the last reference to it will disappear
     return 0;
 }
 
@@ -347,7 +351,6 @@ Fuse::main(
     mknod      => _ctx(_db('mknod',   \&f_mknod)),
     mkdir      => _ctx(_db('mkdir',   \&f_mkdir)),
     rmdir      => _ctx(_db('rmdir',   \&f_rmdir)),
-    getdir     => _db('getdir',       \&f_getdir),
     opendir    => _db('opendir',      \&f_opendir),
     readdir    => _db('readdir',      \&f_readdir),
     releasedir => _db('releasedir',   \&f_releasedir),
@@ -362,7 +365,7 @@ sub debug {
     my @c = caller(0);
     my $str = join(':', strftime('%d/%m %H:%M:%S', gmtime()), ' ', $c[1], $c[3], $c[2]);
     for (split m/\n/, join(' ', map {ref($_) and Dumper($_) or $_} map {$_//'<undef>'} @_)){
-        print "$str: ", $_, "\n"
+        print STDERR "$str: ", $_, "\n";
     }
 }
 
