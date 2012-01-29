@@ -327,7 +327,14 @@ sub f_listxattr {
 
 sub f_statfs {
     my ($path) = @_;
-    return 1024, $inode_start, (0xffffffffffffffff - $inode_start), 0, 0, 0;
+    return 1024, $inode_start, ($MAXINT - $inode_start), 0, 0, 0;
+}
+
+sub f_access {
+    my ($path) = @_;
+    # nothing to do for now, all access is granted (OS/linux kernel determines
+    # this with the 'mode'
+    return 0;
 }
 
 sub _mk_mode {
@@ -403,6 +410,7 @@ Fuse::main(
     listxattr  => _db('listxattr',    \&f_listxattr),
     utimens    => _db('utimens',      \&f_utimes),
     statfs     => _db('statfs',       \&f_statfs),
+    access     => _db('access',       \&f_access),
 );
 
 
