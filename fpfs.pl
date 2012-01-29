@@ -154,8 +154,19 @@ sub f_fsync {
 }
 
 sub f_unlink {
-    my ($fn) = @_;
-    return -Errno::ENOENT() unless defined (my $r = delete $fs_meta->{$fn});
+    my ($path, undef, undef, $ctime) = @_;
+    my $r = delete $fs_meta->{$path};
+    ($r->{nlink} //= 1)--;
+    $r->{ctime} = $ctime;
+
+    my ($dir, $f) = _splitpath($path);
+    my $p = $fs_meta->{$dir};
+    delete $p->{directorylist}{$f};
+    $p->{ctime} = $p->{mtime} = $ctime;
+
+    if ($r->{nlink} == 0){
+        # TODO: cleanup for real, file is gone.
+    }
     return 0;
 }
 
@@ -268,6 +279,7 @@ Fuse::main(
     chown      => _ctx(_db('chown',   \&f_chown)),
     symlink    => _ctx(_db('symlink', \&f_symlink)),
     link       => _ctx(_db('link',    \&f_link)),
+    unlink     => _ctx(_db('unlink',  \&f_unlink)),
     mknod      => _ctx(_db('mknod',   \&f_mknod)),
     mkdir      => _ctx(_db('mkdir',   \&f_mkdir)),
     rmdir      => _ctx(_db('rmdir',   \&f_rmdir)),
