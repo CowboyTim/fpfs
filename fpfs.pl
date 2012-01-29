@@ -6,7 +6,7 @@ use Fuse qw(:all :xattr);
 use Errno qw(:POSIX);
 use File::Basename qw(basename dirname);
 use Data::Dumper;
-use POSIX qw(strftime);
+use POSIX qw(strftime floor);
 use Getopt::Long;
 use Pod::Usage;
 
@@ -289,6 +289,16 @@ sub f_link {
     return 0
 }
 
+sub f_utimes {
+    my ($path, $atime, $ctime) = @_;
+    return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
+    $r->{atime} = floor($atime);
+    $r->{ctime} = floor($ctime);
+    $r->{atimens} = $atime if $r->{atime} != $atime;
+    $r->{ctimens} = $ctime if $r->{ctime} != $ctime;
+    return 0;
+}
+
 sub f_setxattr {
     my ($path, $name, $value) = @_;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
@@ -386,6 +396,7 @@ Fuse::main(
     getxattr   => _db('getxattr',     \&f_getxattr),
     removexattr=> _db('removexattr',  \&f_removexattr),
     listxattr  => _db('listxattr',    \&f_listxattr),
+    utimens    => _db('utimens',      \&f_utimes),
 );
 
 
