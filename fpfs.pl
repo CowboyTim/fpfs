@@ -171,9 +171,8 @@ sub f_unlink {
     delete $p->{directorylist}{$f};
     $p->{ctime} = $p->{mtime} = $ctime;
 
-    if ($r->{nlink} == 0){
-        # TODO: cleanup for real, file is gone.
-    }
+    # cleanup for real, file is gone.
+    _unlink($path, $r, $ctime) if $r->{nlink} == 0;
     return 0;
 }
 
@@ -227,10 +226,7 @@ sub f_rename {
         # file, not in other cases. unlink here also maintains the nlink
         # parameter.
 
-        # TODO: implement this
-        #if (fs_meta[to].blockmap) {
-            #luafs._unlink(self, to, ctime)
-        #}
+        _unlink($to, $$r_to, $ctime);
     }
 
     # rename main node
@@ -374,6 +370,12 @@ sub f_create {
     $p->{directorylist}{$file} = $r;
     $p->{ctime} = $p->{mtime} = $ctime;
     return 0, {f => $r};
+}
+
+sub _unlink {
+    my ($path, $r, $ctime) = @_;
+    return unless keys %{$r->{blockmap}};
+    # TODO: implement this
 }
 
 sub f_truncate {
