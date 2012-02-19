@@ -60,7 +60,9 @@ sub f_getattr {
     my ($dir, $file) = _splitpath($path);
     return -Ernno::ENAMETOOLONG() if length($file) > 255;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
-    return 0, $r->{ino}, $r->{mode}, $r->{nlink}//1, $r->{uid}, $r->{gid}, $r->{dev}//0, $r->{size}, $r->{atime}, $r->{mtime}, $r->{ctime}, 0, 0;
+    return 0, $r->{ino}, $r->{mode}, $r->{nlink}//1,
+         $r->{uid}, $r->{gid}, $r->{dev}//0, $r->{size},
+         $r->{atime}, $r->{mtime}, $r->{ctime}, 128*1024, 0;
 }
 
 sub f_symlink {
@@ -343,11 +345,23 @@ sub f_open {
     return 0, {f => $r};
 }
 
-sub f_release {
+sub f_flush {
     my ($path, $fh) = @_;
+    # nothing to do for the moment
+    return $fh->{errorcode} if defined $fh;
+    return 0;
+}
+
+sub f_release {
+    my ($path, $mode, $fh) = @_;
     # eventually the last reference to it will disappear
     delete $fh->{f} if defined $fh;
     return 0;
+}
+
+sub f_ftruncate {
+    my ($path, $size, $fh, @r) = @_;
+    f_truncate($path, $size, @r);
 }
 
 sub f_truncate {
@@ -357,16 +371,26 @@ sub f_truncate {
     return 0;
 }
 
-sub f_ftruncate {
-    my ($path, $size, $fh, @r) = @_;
-    f_truncate($path, $size, @r);
+sub f_create {
+    my ($path, $mask, $mode, $flags, $cuid, $cgid, $ctime) = @_;
+    $mode = _mk_mode(6,4,4) if $mode == 32768;
+    my $r = $fs_meta->{$path} = _new_meta($mode + $S_IFREG, $cuid, $cgid, $ctime);
+    my ($parent, $file) = _splitpath($path);
+    my $p = $fs_meta->{$parent}{directorylist}{$file} = $fs_meta->{$path};
+    $p->{ctime} = $p->{mtime} = $ctime;
+    return 0, {f => $r};
 }
 
-sub f_flush {
-    my ($path, $fh) = @_;
-    # nothing to do for the moment
-    return $fh->{errorcode} if defined $fh;
-    return 0;
+sub f_read {
+    my ($path, $size, $offset, $obj) = @_;
+    # TODO: implement this!
+    return '';
+}
+
+sub f_write {
+    my ($path, $size, $buf, $offset, $obj) = @_;
+    # TODO: implement this!
+    return length($buf);
 }
 
 sub _mk_mode {
@@ -450,6 +474,9 @@ Fuse::main(
     truncate   => _ctx(_db('truncate',  \&f_truncate)),
     ftruncate  => _ctx(_db('ftruncate', \&f_ftruncate)),
     flush      => _db('flush',          \&f_flush),
+    create     => _ctx(_db('create',    \&f_create)),
+    read       => _db('read',           \&f_read),
+    write      => _db('write',          \&f_write),
 );
 
 
