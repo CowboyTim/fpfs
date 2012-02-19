@@ -312,7 +312,7 @@ sub f_setxattr {
 sub f_getxattr {
     my ($path, $name) = @_;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
-    return ($r->{xattr} //= {})->{$name};
+    return ($r->{xattr}//{})->{$name};
 }
 
 sub f_removexattr {
