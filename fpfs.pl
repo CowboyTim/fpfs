@@ -50,7 +50,7 @@ my $S_SID   = 2**9; #sticky bits etc.
 
 # our data..
 my $inode_start = 1;
-my $fs_meta = {'/' => _new_meta(_mk_mode(7,5,5) + $S_IFDIR, $<, (split m/ /, $()[0], time())};
+my $fs_meta = {'/' => _new_meta(_mk_mode(7,5,5) | $S_IFDIR, $<, (split m/ /, $()[0], time())};
 $fs_meta->{'/'}{nlink} = 2;
 $fs_meta->{'/'}{directorylist} = {};
 
@@ -70,9 +70,10 @@ sub f_symlink {
     # 'from' isn't used,.. that can be even from a seperate filesystem, e.g.
     # when someone makes a symlink on this filesystem...
     my ($parent, $file) = _splitpath($to);
-    my $t = $fs_meta->{$to} = _new_meta(_mk_mode(7,7,7) + $S_IFLNK, $cuid, $cgid, $ctime);
+    my $t = $fs_meta->{$to} = _new_meta(_mk_mode(7,7,7) | $S_IFLNK, $cuid, $cgid, $ctime);
     $t->{target} = $from;
-    my $p = $fs_meta->{$parent}{directorylist}{$file} = $fs_meta->{$to};
+    my $p = $fs_meta->{$parent};
+    $p->{directorylist}{$file} = $fs_meta->{$to};
     $p->{ctime} = $p->{mtime} = $ctime;
     return 0;
 }
@@ -348,12 +349,12 @@ sub f_open {
 sub f_flush {
     my ($path, $fh) = @_;
     # nothing to do for the moment
-    return $fh->{errorcode} if defined $fh;
+    return $fh->{errorcode} if defined $fh and exists $fh->{errorcode};
     return 0;
 }
 
 sub f_release {
-    my ($path, $mode, $fh) = @_;
+    my ($path, $mask, $fh) = @_;
     # eventually the last reference to it will disappear
     delete $fh->{f} if defined $fh;
     return 0;
@@ -372,11 +373,12 @@ sub f_truncate {
 }
 
 sub f_create {
-    my ($path, $mask, $mode, $flags, $cuid, $cgid, $ctime) = @_;
+    my ($path, $mode, $mask, $flags, $cuid, $cgid, $ctime) = @_;
     $mode = _mk_mode(6,4,4) if $mode == 32768;
-    my $r = $fs_meta->{$path} = _new_meta($mode + $S_IFREG, $cuid, $cgid, $ctime);
+    my $r = $fs_meta->{$path} = _new_meta($mode | $S_IFREG, $cuid, $cgid, $ctime);
     my ($parent, $file) = _splitpath($path);
-    my $p = $fs_meta->{$parent}{directorylist}{$file} = $fs_meta->{$path};
+    my $p = $fs_meta->{$parent};
+    $p->{directorylist}{$file} = $r;
     $p->{ctime} = $p->{mtime} = $ctime;
     return 0, {f => $r};
 }
@@ -441,7 +443,8 @@ sub _splitpath {
 
 Fuse::main(
     mountpoint => $mountpoint,
-    mountopts  => "allow_other,default_permissions,hard_remove,use_ino,attr_timeout=0,readdir_ino",
+    mountopts  =>
+"allow_other,default_permissions,hard_remove,use_ino,attr_timeout=0,entry_timeout=0,readdir_ino",
     debug      => $opts->{debug},
     getattr    => _db('getattr',        \&f_getattr),
     fgetattr   => _db('fgetattr',       \&f_getattr),
