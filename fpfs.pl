@@ -365,13 +365,6 @@ sub f_ftruncate {
     f_truncate($path, $size, @r);
 }
 
-sub f_truncate {
-    my ($path, $size, undef, undef, $ctime) = @_;
-    return -Errno::EINVAL() if $size < 0;
-    # TODO: implement this!
-    return 0;
-}
-
 sub f_create {
     my ($path, $mode, $mask, $flags, $cuid, $cgid, $ctime) = @_;
     $mode = _mk_mode(6,4,4) if $mode == 32768;
@@ -381,6 +374,13 @@ sub f_create {
     $p->{directorylist}{$file} = $r;
     $p->{ctime} = $p->{mtime} = $ctime;
     return 0, {f => $r};
+}
+
+sub f_truncate {
+    my ($path, $size, undef, undef, $ctime) = @_;
+    return -Errno::EINVAL() if $size < 0;
+    # TODO: implement this!
+    return 0;
 }
 
 sub f_read {
