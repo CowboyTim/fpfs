@@ -67,14 +67,8 @@ sub f_getattr {
 
 sub f_symlink {
     my ($from, $to, $cuid, $cgid, $ctime) = @_;
-    # 'from' isn't used,.. that can be even from a seperate filesystem, e.g.
-    # when someone makes a symlink on this filesystem...
-    my ($parent, $file) = _splitpath($to);
-    my $t = $fs_meta->{$to} = _new_meta(_mk_mode(7,7,7) | $S_IFLNK, $cuid, $cgid, $ctime);
-    $t->{target} = $from;
-    my $p = $fs_meta->{$parent};
-    $p->{directorylist}{$file} = $fs_meta->{$to};
-    $p->{ctime} = $p->{mtime} = $ctime;
+    my $r = _new_entry($to, _mk_mode(7,7,7)|$S_IFLNK, $cuid, $cgid, $ctime);
+    $r->{target} = $from;
     return 0;
 }
 
@@ -364,16 +358,13 @@ sub f_ftruncate {
 sub f_create {
     my ($path, $mode, $mask, $flags, $cuid, $cgid, $ctime) = @_;
     $mode = _mk_mode(6,4,4) if $mode == 32768;
-    my $r = $fs_meta->{$path} = _new_meta($mode | $S_IFREG, $cuid, $cgid, $ctime);
-    my ($parent, $file) = _splitpath($path);
-    my $p = $fs_meta->{$parent};
-    $p->{directorylist}{$file} = $r;
-    $p->{ctime} = $p->{mtime} = $ctime;
+    my $r = _new_entry($path, $mode|$S_IFREG, $cuid, $cgid, $ctime);
     return 0, {f => $r};
 }
 
 sub _unlink {
     my ($path, $r, $ctime) = @_;
+    debug(\@_);
     return unless keys %{$r->{blockmap}};
     # TODO: implement this
 }
@@ -414,6 +405,16 @@ sub _new_meta {
         mtime => $now,
         ctime => $now
     }
+}
+
+sub _new_entry {
+    my ($path, $mode, $cuid, $cgid, $ctime) = @_;
+    my $r = $fs_meta->{$path} = _new_meta($mode, $cuid, $cgid, $ctime);
+    my ($parent, $file) = _splitpath($path);
+    my $p = $fs_meta->{$parent};
+    $p->{directorylist}{$file} = $r;
+    $p->{ctime} = $p->{mtime} = $ctime;
+    return $r;
 }
 
 sub _db {
