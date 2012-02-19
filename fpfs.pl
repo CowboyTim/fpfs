@@ -106,7 +106,6 @@ sub f_mkdir {
     $p->{nlink}++;
     $p->{mtime} = $p->{ctime} = $ctime;
     $p->{directorylist}{$subdir} = $m;
-    debug("returning");
     return 0;
 }
 
