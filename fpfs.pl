@@ -500,10 +500,11 @@ sub _new_entry {
 sub _db {
     my ($self, $abbr, $f) = @_;
     my $data = $self->{-data};
+    my $wsub = sub {
+        die $abbr, ': ', @_;
+    };
     sub {
-        local $SIG{__WARN__} = sub {
-            die $abbr, ': ', @_;
-        };
+        local $SIG{__WARN__} = $wsub;
         debug($abbr, 'arguments', \@_);
         my @r = $self->$f($data, @_);
         debug($abbr, 'result', @r, $data);
