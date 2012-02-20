@@ -429,20 +429,30 @@ sub f_create {
 sub _unlink {
     my ($fs_meta, $path, $r, $ctime) = @_;
     debug(\@_);
-    return unless keys %{$r->{blockmap}};
+    return unless @{$r->{blockmap}};
     # TODO: implement this
 }
 
 sub f_truncate {
     my ($fs_meta, $path, $size, undef, undef, $ctime) = @_;
-    if($size < 0){
+    if ($size < 0){
         return -Errno::EINVAL();
     } elsif ($size == 0){
         # full truncate, cleanup as if it was an unlink, just don't remove the
         # entry from the meta data!
         _unlink($fs_meta, $path, $fs_meta->{$path}, $ctime);
     } else {
-        # TODO: implement this!
+        my $r = $fs_meta->{$path};
+        if ($size > $r->{size}){
+            # if new.size > current.size: just increase the size, blocks are
+            # allocated dynamically when they are written to
+            $r->{size} = $size;
+        } else {
+            # if new.size < current.size: give all remaining blocks back +
+            # update the block we split (e.g. size not on a block boundary)
+            # TODO: implement this
+        }
+        # TODO: implement this
     }
     return 0;
 }
