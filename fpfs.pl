@@ -20,11 +20,13 @@ my $mountpoint = shift @ARGV
         msg     => "Need mountpount\n"
     );
 
-Fuse::POSIX->new(
-    mountpoint => $mountpoint,
-    mountopts  => "allow_other,default_permissions,hard_remove,use_ino,attr_timeout=0,entry_timeout=0,readdir_ino",
-    %{$opts}
-)->run();
+Fuse::POSIX
+    ->new(
+        mountpoint => $mountpoint,
+        mountopts  => "allow_other,default_permissions,hard_remove,use_ino,attr_timeout=0,entry_timeout=0,readdir_ino",
+        %{$opts}
+    )
+    ->run();
 
 package Fuse::POSIX;
 
