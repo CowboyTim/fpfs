@@ -53,17 +53,16 @@ use constant S_GID   => 2**3; #group
 use constant S_UID   => 2**6; #owner
 use constant S_SID   => 2**9; #sticky bits etc.
 
-# not really OO, but then again, not really needed?!
-my $inode_start;
-BEGIN {$inode_start = 1};
-
 sub new {
     my ($class, %args) = @_;
-    my $self = bless {-args => \%args}, ref($class)||$class;
+    my $self = bless {
+        -data        => {},
+        -inode_start => 1,
+        -args        => \%args}, ref($class)||$class;
 
     # our data..
-    my $fs_meta = $self->{-data} = {};
-    $fs_meta->{'/'} = _new_meta(_mk_mode(7,5,5)|S_IFDIR, $<, (split m/ /, $()[0], time());
+    my $fs_meta = $self->{-data};
+    $fs_meta->{'/'} = $self->_new_meta(_mk_mode(7,5,5)|S_IFDIR, $<, (split m/ /, $()[0], time());
     $fs_meta->{'/'}{nlink} = 2;
     $fs_meta->{'/'}{directorylist} = {};
 
@@ -120,7 +119,7 @@ sub run {
 };
 
 sub f_getattr {
-    my ($fs_meta, $path) = @_;
+    my ($self, $fs_meta, $path) = @_;
     return -Errno::ENAMETOOLONG() if length($path) > 1024;
     my ($dir, $file) = _splitpath($path);
     return -Ernno::ENAMETOOLONG() if length($file) > 255;
@@ -131,26 +130,26 @@ sub f_getattr {
 }
 
 sub f_symlink {
-    my ($fs_meta, $from, $to, $cuid, $cgid, $ctime) = @_;
-    my $r = _new_entry($fs_meta, $to, _mk_mode(7,7,7)|S_IFLNK, $cuid, $cgid, $ctime);
+    my ($self, $fs_meta, $from, $to, $cuid, $cgid, $ctime) = @_;
+    my $r = $self->_new_entry($fs_meta, $to, _mk_mode(7,7,7)|S_IFLNK, $cuid, $cgid, $ctime);
     $r->{target} = $from;
     return 0;
 }
 
 sub f_readlink {
-    my ($fs_meta, $path) = @_;
+    my ($self, $fs_meta, $path) = @_;
     return -Errno::ENOENT() unless defined(my $entry = $fs_meta->{$path});
     return $entry->{target};
 }
 
 sub f_mknod {
-    my ($fs_meta, $path, $mode, $rdev, $cuid, $cgid, $ctime) = @_;
+    my ($self, $fs_meta, $path, $mode, $rdev, $cuid, $cgid, $ctime) = @_;
     # only called for non-symlinks, non-directories, non-files and links as
     # those are handled by symlink, mkdir, create, link. This is called when
     # mkfifo is used to make a named pipe for instance.
     #
     # FIXME: support 'plain' mknod too: S_IFBLK and S_IFCHR
-    my $entry = $fs_meta->{$path} = _new_meta($mode, $cuid, $cgid, $ctime);
+    my $entry = $fs_meta->{$path} = $self->_new_meta($mode, $cuid, $cgid, $ctime);
     $entry->{dev} = $rdev;
 
     my ($parent, $file) = _splitpath($path);
@@ -161,10 +160,10 @@ sub f_mknod {
 }
 
 sub f_mkdir {
-    my ($fs_meta, $path, $mode, $cuid, $cgid, $ctime) = @_;
+    my ($self, $fs_meta, $path, $mode, $cuid, $cgid, $ctime) = @_;
     return -Errno::ENAMETOOLONG() if length($path) > 1024;
     my ($parent, $subdir) = _splitpath($path);
-    my $m = $fs_meta->{$path} = _new_meta($mode + S_IFDIR, $cuid, $cgid, $ctime);
+    my $m = $fs_meta->{$path} = $self->_new_meta($mode + S_IFDIR, $cuid, $cgid, $ctime);
     $m->{directorylist} = {};
     $m->{nlink} = 2;
     my $p = $fs_meta->{$parent};
@@ -175,7 +174,7 @@ sub f_mkdir {
 }
 
 sub f_rmdir {
-    my ($fs_meta, $path, undef, undef, $ctime) = @_;
+    my ($self, $fs_meta, $path, undef, undef, $ctime) = @_;
     return -Errno::EEXIST() if keys %{$fs_meta->{$path}{directorylist}};
     my ($parent, $dir) = _splitpath($path);
     my $p = $fs_meta->{$parent};
@@ -187,7 +186,7 @@ sub f_rmdir {
 }
 
 sub f_opendir {
-    my ($fs_meta, $path) = @_;
+    my ($self, $fs_meta, $path) = @_;
     # each() is not intelligent enough, so we make a copy and do shift()...
     # *sigh*. We could use a double array (basically implement the hash
     # ourselves) and use an index iterator value.
@@ -195,31 +194,31 @@ sub f_opendir {
 }
 
 sub f_readdir {
-    my ($fs_meta, $path, $offset, $dir_fh) = @_;
+    my ($self, $fs_meta, $path, $offset, $dir_fh) = @_;
     $path = ($path ne '/')?"$path/":$path;
     my ($dirent, $attr) = shift @{$dir_fh};
     return 0 unless defined $dirent;
-    return [$offset+1, $dirent, [f_getattr($fs_meta, "$path$dirent")]], 0;
+    return [$offset+1, $dirent, [$self->f_getattr($fs_meta, "$path$dirent")]], 0;
 }
 
 sub f_releasedir {
-    my ($fs_meta, $path, $dir_fh) = @_;
+    my ($self, $fs_meta, $path, $dir_fh) = @_;
     # eventually the last reference to it will disappear
     return 0;
 }
 
 sub f_fsyncdir {
-    my ($fs_meta, $path, $dir_fh) = @_;
+    my ($self, $fs_meta, $path, $dir_fh) = @_;
     return 0; # nothing to do for now
 }
 
 sub f_fsync {
-    my ($fs_meta, $path, $fh) = @_;
+    my ($self, $fs_meta, $path, $fh) = @_;
     return 0; # nothing to do for now
 }
 
 sub f_unlink {
-    my ($fs_meta, $path, undef, undef, $ctime) = @_;
+    my ($self, $fs_meta, $path, undef, undef, $ctime) = @_;
     my $r = delete $fs_meta->{$path};
     ($r->{nlink} //= 1)--;
     $r->{ctime} = $ctime;
@@ -230,12 +229,12 @@ sub f_unlink {
     $p->{ctime} = $p->{mtime} = $ctime;
 
     # cleanup for real, file is gone.
-    _unlink($fs_meta, $path, $r, $ctime) if $r->{nlink} == 0;
+    $self->_unlink($fs_meta, $path, $r, $ctime) if $r->{nlink} == 0;
     return 0;
 }
 
 sub f_chown {
-    my ($fs_meta, $path, $cuid, $cgid, undef, undef, $ctime) = @_;
+    my ($self, $fs_meta, $path, $cuid, $cgid, undef, undef, $ctime) = @_;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
 
     # Funny this is.. but this appears to be ext3 on linux behavior.
@@ -257,7 +256,7 @@ sub f_chown {
 }
 
 sub f_chmod {
-    my ($fs_meta, $path, $mode, undef, undef, $ctime) = @_;
+    my ($self, $fs_meta, $path, $mode, undef, undef, $ctime) = @_;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
     $r->{mode}  = $mode;
     $r->{ctime} = $ctime;
@@ -265,7 +264,7 @@ sub f_chmod {
 }
 
 sub f_rename {
-    my ($fs_meta, $from, $to, undef, undef, $ctime) = @_;
+    my ($self, $fs_meta, $from, $to, undef, undef, $ctime) = @_;
 
     # FUSE handles paths, e.g. a file being moved to a directory: the 'to'
     # becomes that target directory + "/" + basename(from).
@@ -284,7 +283,7 @@ sub f_rename {
         # file, not in other cases. unlink here also maintains the nlink
         # parameter.
 
-        _unlink($fs_meta, $to, $$r_to, $ctime);
+        $self->_unlink($fs_meta, $to, $$r_to, $ctime);
     }
 
     # rename main node
@@ -328,7 +327,7 @@ sub f_rename {
 }
 
 sub f_link {
-    my ($fs_meta, $from, $to, undef, undef, $ctime) = @_;
+    my ($self, $fs_meta, $from, $to, undef, undef, $ctime) = @_;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$from});
 
     # update meta
@@ -347,7 +346,7 @@ sub f_link {
 }
 
 sub f_utimes {
-    my ($fs_meta, $path, $atime, $ctime) = @_;
+    my ($self, $fs_meta, $path, $atime, $ctime) = @_;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
     $r->{atime} = floor($atime);
     $r->{ctime} = floor($ctime);
@@ -357,84 +356,84 @@ sub f_utimes {
 }
 
 sub f_setxattr {
-    my ($fs_meta, $path, $name, $value) = @_;
+    my ($self, $fs_meta, $path, $name, $value) = @_;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
     ($r->{xattr} //= {})->{$name} = $value;
     return 0;
 }
 
 sub f_getxattr {
-    my ($fs_meta, $path, $name) = @_;
+    my ($self, $fs_meta, $path, $name) = @_;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
     return ($r->{xattr}//{})->{$name};
 }
 
 sub f_removexattr {
-    my ($fs_meta, $path, $name) = @_;
+    my ($self, $fs_meta, $path, $name) = @_;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
     delete $r->{xattr}{$name};
     return 0;
 }
 
 sub f_listxattr {
-    my ($fs_meta, $path) = @_;
+    my ($self, $fs_meta, $path) = @_;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
     return values %{$r->{xattr}//{}}, 0;
 }
 
 sub f_statfs {
-    my ($fs_meta, $path) = @_;
-    return 1024, $inode_start, (MAXINT - $inode_start), 0, 0, 0;
+    my ($self, $fs_meta, $path) = @_;
+    return 1024, $self->{-inode_start}, (MAXINT - $self->{-inode_start}), 0, 0, 0;
 }
 
 sub f_access {
-    my ($fs_meta, $path) = @_;
+    my ($self, $fs_meta, $path) = @_;
     # nothing to do for now, all access is granted (OS/linux kernel determines
     # this with the 'mode'
     return 0;
 }
 
 sub f_open {
-    my ($fs_meta, $path) = @_;
+    my ($self, $fs_meta, $path) = @_;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
     return 0, {f => $r};
 }
 
 sub f_flush {
-    my ($fs_meta, $path, $fh) = @_;
+    my ($self, $fs_meta, $path, $fh) = @_;
     # nothing to do for the moment
     return $fh->{errorcode} if defined $fh and exists $fh->{errorcode};
     return 0;
 }
 
 sub f_release {
-    my ($fs_meta, $path, $mask, $fh) = @_;
+    my ($self, $fs_meta, $path, $mask, $fh) = @_;
     # eventually the last reference to it will disappear
     delete $fh->{f} if defined $fh;
     return 0;
 }
 
 sub f_ftruncate {
-    my ($fs_meta, $path, $size, $fh, @r) = @_;
-    f_truncate($fs_meta, $path, $size, @r);
+    my ($self, $fs_meta, $path, $size, $fh, @r) = @_;
+    $self->f_truncate($fs_meta, $path, $size, @r);
 }
 
 sub f_create {
-    my ($fs_meta, $path, $mode, $mask, $flags, $cuid, $cgid, $ctime) = @_;
+    my ($self, $fs_meta, $path, $mode, $mask, $flags, $cuid, $cgid, $ctime) = @_;
     $mode = _mk_mode(6,4,4) if $mode == 32768;
-    my $r = _new_entry($fs_meta, $path, $mode|S_IFREG, $cuid, $cgid, $ctime);
+    my $r = $self->_new_entry($fs_meta, $path, $mode|S_IFREG, $cuid, $cgid, $ctime);
     return 0, {f => $r};
 }
 
 sub _unlink {
-    my ($fs_meta, $path, $r, $ctime) = @_;
+    my ($self, $fs_meta, $path, $r, $ctime) = @_;
     debug(\@_);
-    return unless @{$r->{blockmap}};
+    return unless @{$r->{blockmap}//[]};
     # TODO: implement this
 }
 
 sub f_truncate {
-    my ($fs_meta, $path, $size, undef, undef, $ctime) = @_;
+    my ($self, $fs_meta, $path, $size, undef, undef, $ctime) = @_;
     if ($size < 0){
         return -Errno::EINVAL();
     } elsif ($size == 0){
@@ -458,13 +457,13 @@ sub f_truncate {
 }
 
 sub f_read {
-    my ($fs_meta, $path, $size, $offset, $obj) = @_;
+    my ($self, $fs_meta, $path, $size, $offset, $obj) = @_;
     # TODO: implement this!
     return '';
 }
 
 sub f_write {
-    my ($fs_meta, $path, $size, $buf, $offset, $obj) = @_;
+    my ($self, $fs_meta, $path, $size, $buf, $offset, $obj) = @_;
     # TODO: implement this!
     return length($buf);
 }
@@ -475,10 +474,10 @@ sub _mk_mode {
 }
 
 sub _new_meta {
-    my ($mymode, $uid, $gid, $now) = @_;
+    my ($self, $mymode, $uid, $gid, $now) = @_;
     return {
         mode  => $mymode,
-        ino   => $inode_start++,
+        ino   => $self->{-inode_start}++,
         uid   => $uid,
         gid   => $gid,
         size  => 0,
@@ -489,8 +488,8 @@ sub _new_meta {
 }
 
 sub _new_entry {
-    my ($fs_meta, $path, $mode, $cuid, $cgid, $ctime) = @_;
-    my $r = $fs_meta->{$path} = _new_meta($mode, $cuid, $cgid, $ctime);
+    my ($self, $fs_meta, $path, $mode, $cuid, $cgid, $ctime) = @_;
+    my $r = $fs_meta->{$path} = $self->_new_meta($mode, $cuid, $cgid, $ctime);
     my ($parent, $file) = _splitpath($path);
     my $p = $fs_meta->{$parent};
     $p->{directorylist}{$file} = $r;
@@ -500,13 +499,14 @@ sub _new_entry {
 
 sub _db {
     my ($self, $abbr, $f) = @_;
+    my $data = $self->{-data};
     sub {
         local $SIG{__WARN__} = sub {
             die $abbr, ': ', @_;
         };
         debug($abbr, 'arguments', \@_);
-        my @r = &$f($self->{-data}, @_);
-        debug($abbr, 'result', @r, $self->{-data});
+        my @r = $self->$f($data, @_);
+        debug($abbr, 'result', @r, $data);
         wantarray ? @r : $r[0];
     };
 }
