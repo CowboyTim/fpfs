@@ -23,7 +23,7 @@ my $mountpoint = shift @ARGV
 Fuse::POSIX->new(
     mountpoint => $mountpoint,
     mountopts  => "allow_other,default_permissions,hard_remove,use_ino,attr_timeout=0,entry_timeout=0,readdir_ino",
-    debug      => $opts->{debug},
+    %{$opts}
 )->run();
 
 package Fuse::POSIX;
@@ -72,7 +72,7 @@ sub run {
     my ($self) = @_;
     {
         no warnings 'redefine';
-        *{debug} = sub {} unless $self->{-args}{debug};
+        *{debug} = sub {} unless defined $self->{-args}{debug};
     }
 
     $SIG{__WARN__} = sub {die @_};
