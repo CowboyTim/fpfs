@@ -435,8 +435,15 @@ sub _unlink {
 
 sub f_truncate {
     my ($fs_meta, $path, $size, undef, undef, $ctime) = @_;
-    return -Errno::EINVAL() if $size < 0;
-    # TODO: implement this!
+    if($size < 0){
+        return -Errno::EINVAL();
+    } elsif ($size == 0){
+        # full truncate, cleanup as if it was an unlink, just don't remove the
+        # entry from the meta data!
+        _unlink($fs_meta, $path, $fs_meta->{$path}, $ctime);
+    } else {
+        # TODO: implement this!
+    }
     return 0;
 }
 
