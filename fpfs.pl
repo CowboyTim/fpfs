@@ -113,8 +113,6 @@ sub run {
         ftruncate   => _ctx($self->_db('ftruncate', \&f_ftruncate)),
         flush       => $self->_db('flush',          \&f_flush),
         create      => _ctx($self->_db('create',    \&f_create)),
-        read        => $self->_db('read',           \&f_read),
-        write       => $self->_db('write',          \&f_write),
     );
 };
 
@@ -229,7 +227,7 @@ sub f_unlink {
     $p->{ctime} = $p->{mtime} = $ctime;
 
     # cleanup for real, file is gone.
-    $self->_unlink($fs_meta, $path, $r, $ctime) if $r->{nlink} == 0;
+    $self->_unlink($r, $ctime) if $r->{nlink} == 0;
     return 0;
 }
 
@@ -283,7 +281,7 @@ sub f_rename {
         # file, not in other cases. unlink here also maintains the nlink
         # parameter.
 
-        $self->_unlink($fs_meta, $to, $$r_to, $ctime);
+        $self->_unlink($$r_to, $ctime);
     }
 
     # rename main node
@@ -426,46 +424,69 @@ sub f_create {
 }
 
 sub _unlink {
-    my ($self, $fs_meta, $path, $r, $ctime) = @_;
+    my ($self, $r, $ctime) = @_;
     debug(\@_);
-    return unless @{$r->{blockmap}//[]};
-    # TODO: implement this
+    $self->addtofreelist(\$r->{datastore});
+}
+
+sub addtofreelist {
+    my ($self, $buffer) = @_;
+    debug(\@_);
+    $$buffer = undef;
+}
+
+sub writedata {
+    my ($self, $offset, $size, $what, $buffer) = @_;
+    debug(\@_);
+    $$buffer //= '';
+    substr($$buffer, $offset, $size, $what);
+    return length($what);
+}
+
+sub readdata {
+    my ($self, $offset, $size, $buffer) = @_;
+    debug(\@_);
+    return '' unless defined $$buffer;
+    return substr($$buffer, $offset, $size); 
 }
 
 sub f_truncate {
     my ($self, $fs_meta, $path, $size, undef, undef, $ctime) = @_;
+    my $r = $fs_meta->{$path};
     if ($size < 0){
         return -Errno::EINVAL();
     } elsif ($size == 0){
         # full truncate, cleanup as if it was an unlink, just don't remove the
         # entry from the meta data!
-        _unlink($fs_meta, $path, $fs_meta->{$path}, $ctime);
+        $self->_unlink($fs_meta->{$path}, $ctime);
     } else {
-        my $r = $fs_meta->{$path};
         if ($size > $r->{size}){
             # if new.size > current.size: just increase the size, blocks are
             # allocated dynamically when they are written to
-            $r->{size} = $size;
         } else {
             # if new.size < current.size: give all remaining blocks back +
             # update the block we split (e.g. size not on a block boundary)
-            # TODO: implement this
+            $self->writedata($size, $r->{size} - $size, '', \$r->{datastore});
         }
-        # TODO: implement this
     }
+    $r->{size} = $size;
     return 0;
 }
 
 sub f_read {
     my ($self, $fs_meta, $path, $size, $offset, $obj) = @_;
-    # TODO: implement this!
-    return '';
+    my $r = $fs_meta->{$path};
+    return $self->readdata($offset, $size, \$r->{datastore});
 }
 
 sub f_write {
-    my ($self, $fs_meta, $path, $size, $buf, $offset, $obj) = @_;
-    # TODO: implement this!
-    return length($buf);
+    my ($self, $fs_meta, $path, $buf, $offset, $obj) = @_;
+    my $r = $fs_meta->{$path};
+    my $newsize = length($buf);
+    if($offset + $newsize > $r->{size}){
+        $r->{size} = $offset + $newsize;
+    }
+    return $self->writedata($offset, $newsize, $buf, \$r->{datastore});
 }
 
 sub _mk_mode {
