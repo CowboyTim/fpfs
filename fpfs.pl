@@ -446,7 +446,6 @@ sub writedata {
 sub readdata {
     my ($self, $offset, $size, $buffer) = @_;
     debug(\@_);
-    return '' unless defined $$buffer;
     return substr($$buffer, $offset, $size); 
 }
 
@@ -476,6 +475,7 @@ sub f_truncate {
 sub f_read {
     my ($self, $fs_meta, $path, $size, $offset, $obj) = @_;
     my $r = $fs_meta->{$path};
+    return '' unless defined $r->{datastore};
     return $self->readdata($offset, $size, \$r->{datastore});
 }
 
