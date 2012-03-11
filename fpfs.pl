@@ -108,7 +108,7 @@ sub run {
         open        => $self->_db('open',           \&f_open),
         release     => $self->_db('release',        \&f_release),
         read        => $self->_db('read',           \&f_read),
-        write       => $self->_db('write',          \&f_write),
+        write       => _ctx($self->_db('write',     \&f_write)),
         truncate    => _ctx($self->_db('truncate',  \&f_truncate)),
         ftruncate   => _ctx($self->_db('ftruncate', \&f_ftruncate)),
         flush       => $self->_db('flush',          \&f_flush),
@@ -473,6 +473,7 @@ sub f_truncate {
         }
     }
     $r->{size} = $size;
+    $r->{ctime} = $r->{mtime} = $ctime;
     return 0;
 }
 
@@ -484,12 +485,13 @@ sub f_read {
 }
 
 sub f_write {
-    my ($self, $fs_meta, $path, $buf, $offset, $obj) = @_;
+    my ($self, $fs_meta, $path, $buf, $offset, $obj, undef, undef, $ctime) = @_;
     my $r = $fs_meta->{$path};
     my $newsize = length($buf);
     if($offset + $newsize > $r->{size}){
         $r->{size} = $offset + $newsize;
     }
+    $r->{ctime} = $r->{mtime} = $ctime;
     return $self->writedata($offset, $newsize, $buf, \$r->{datastore});
 }
 
