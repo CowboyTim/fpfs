@@ -264,7 +264,7 @@ sub f_chmod {
 }
 
 sub f_rename {
-    my ($self, $fs_meta, $from, $to, undef, undef, $ctime) = @_;
+    my ($self, $fs_meta, $from, $to, $cuid, $cgid, $ctime) = @_;
 
     # FUSE handles paths, e.g. a file being moved to a directory: the 'to'
     # becomes that target directory + "/" + basename(from).
@@ -272,6 +272,9 @@ sub f_rename {
     my $r_to = \($fs_meta->{$to});
 
     if ($$r_to){
+
+        # Fuse should do this or more specific: the kernel
+        return -Errno::EACCES() unless $cuid == $$r_to->{uid};
 
         # target is a non-empty directory? return ENOTEMPTY errno.h
         return -Errno::ENOTEMPTY() if keys %{$$r_to->{directorylist}//{}};
