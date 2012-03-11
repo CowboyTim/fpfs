@@ -120,7 +120,7 @@ sub f_getattr {
     my ($self, $fs_meta, $path) = @_;
     return -Errno::ENAMETOOLONG() if length($path) > 1024;
     my ($dir, $file) = _splitpath($path);
-    return -Ernno::ENAMETOOLONG() if length($file) > 255;
+    return -Errno::ENAMETOOLONG() if length($file) > 255;
     return -Errno::ENOENT() unless defined (my $r = $fs_meta->{$path});
     return 0, $r->{ino}, $r->{mode}, $r->{nlink}//1,
          $r->{uid}, $r->{gid}, $r->{dev}//0, $r->{size},
