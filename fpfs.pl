@@ -241,7 +241,9 @@ sub f_chown {
     # details that makes this code rather 'not needed' anywayz..
     #
     # That's the reason why tests 141, 145, 149 and 153 of pjd fail
-    # btw...
+    # btw... If we would choose another fs type to compare with: that would
+    # keep the ctime as it is btw.
+
     if ($cuid != 0){
         unless ($cuid == MAXINT and $cgid == MAXINT) {
             $r->{mode} &= ~S_SID;
