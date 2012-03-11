@@ -502,7 +502,7 @@ sub f_write {
 
 sub _mk_mode {
     my ($owner, $group, $world, $sticky) = @_;
-    return $owner * S_UID + $group * S_GID + $world + ($sticky // 0) * S_SID;
+    return $owner * S_UID | $group * S_GID | $world | ($sticky // 0) * S_SID;
 }
 
 sub _new_meta {
