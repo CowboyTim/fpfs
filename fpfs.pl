@@ -439,6 +439,10 @@ sub writedata {
     my ($self, $offset, $size, $what, $buffer) = @_;
     debug(\@_);
     $$buffer //= '';
+    my $currentsize = length($$buffer);
+    if ($offset >= $currentsize){
+        $$buffer .= 0x00 x ($offset - length($$buffer) + 1);
+    }
     substr($$buffer, $offset, $size, $what);
     return length($what);
 }
