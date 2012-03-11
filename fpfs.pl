@@ -23,7 +23,7 @@ my $mountpoint = shift @ARGV
 Fuse::POSIX
     ->new(
         mountpoint => $mountpoint,
-        mountopts  => "allow_other,default_permissions,hard_remove,use_ino,attr_timeout=0,entry_timeout=0,readdir_ino",
+        mountopts  => "allow_other,default_permissions,hard_remove,use_ino,attr_timeout=0,entry_timeout=0,readdir_ino,hard_remove,direct_io",
         %{$opts}
     )
     ->run();
