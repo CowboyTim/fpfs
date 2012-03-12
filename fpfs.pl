@@ -161,7 +161,7 @@ sub f_mkdir {
     my ($self, $fs_meta, $path, $mode, $cuid, $cgid, $ctime) = @_;
     return -Errno::ENAMETOOLONG() if length($path) > 1024;
     my ($parent, $subdir) = _splitpath($path);
-    my $m = $fs_meta->{$path} = $self->_new_meta($mode + S_IFDIR, $cuid, $cgid, $ctime);
+    my $m = $fs_meta->{$path} = $self->_new_meta($mode|S_IFDIR, $cuid, $cgid, $ctime);
     $m->{directorylist} = {};
     $m->{nlink} = 2;
     my $p = $fs_meta->{$parent};
