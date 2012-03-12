@@ -455,6 +455,11 @@ sub writedata {
 sub readdata {
     my ($self, $offset, $size, $buffer) = @_;
     debug(\@_);
+    $$buffer //= '';
+    my $currentsize = length($$buffer);
+    if ($offset >= $currentsize){
+        return '';
+    }
     return substr($$buffer, $offset, $size); 
 }
 
