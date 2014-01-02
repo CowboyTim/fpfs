@@ -601,7 +601,7 @@ sub debug {
 
 =head1 SYNOPSIS
 
-    perl tstfuse.pl [OPTIONS] <mountpoint>
+    perl fpfs.pl [OPTIONS] <mountpoint>
 
 =head1 OPTIONS
 
